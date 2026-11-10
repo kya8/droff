@@ -1,8 +1,12 @@
 # droff
 
 A CLI tool for Linux to perform the USB storage removal sequence used by
-`udisksctl power-off -b DEVICE`. Requires only the Linux kernel, libc,
-and `/proc`, `/sys` access.
+`udisksctl power-off -b DEVICE`. Requires only the Linux kernel and `/proc`,
+`/sys` access.
+
+## Download
+Grab statically-linked binaries from Github actions:
+[![Builds](https://github.com/kya8/droff/actions/workflows/build.yml/badge.svg)](https://github.com/kya8/droff/actions/workflows/build.yml)
 
 ## Build
 
@@ -16,16 +20,13 @@ make
 The executable is `build/droff`. Compiler and linker options can be overridden
 on the make command line, for example `make CC=clang CFLAGS='-O2 -g -Werror'`.
 
-GitHub Actions builds statically-linked amd64 and arm64 binaries, in an Alpine
-Linux container.
-
 ## Usage
 
 Unmount filesystems on the target drive before running:
 
 ```sh
-build/droff --dry-run /dev/sdb
-sudo build/droff /dev/sdb
+droff --dry-run /dev/sdx
+sudo droff /dev/sdx
 ```
 
 The block device path is the required positional argument. Partition paths and
