@@ -1,0 +1,54 @@
+name: Build static binaries
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux ${{ matrix.arch }} static PIE
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            machine: Advanced Micro Devices X86-64
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+            machine: AArch64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build and verify in Alpine
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          docker run --rm \
+            --platform "linux/$TARGET_ARCH" \
+            --volume "$GITHUB_WORKSPACE:/work" \
+            --workdir /work \
+            --env EXPECTED_MACHINE \
+            alpine:latest sh -eu -c '
+              apk add --no-cache build-base linux-headers
+              make clean
+              make -j2 CC=cc CFLAGS="-O2 -fPIE -Werror" LDFLAGS="-static-pie -s"
+              build/droff --help
+            '
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: droff-linux-${{ matrix.arch }}
+          path: build/droff
+          if-no-files-found: error

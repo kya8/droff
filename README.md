@@ -16,10 +16,12 @@ make
 The executable is `build/droff`. Compiler and linker options can be overridden
 on the make command line, for example `make CC=clang CFLAGS='-O2 -g -Werror'`.
 
+GitHub Actions builds statically-linked amd64 and arm64 binaries, in an Alpine
+Linux container.
+
 ## Usage
 
-Unmount the filesystems, disable swap, and close encryption or other block
-device mappings using the storage before running:
+Unmount filesystems on the target drive before running:
 
 ```sh
 build/droff --dry-run /dev/sdb
@@ -40,7 +42,7 @@ access failures are reported. Typically the removal command requires root.
 nodes, flush caches, send SCSI commands, or open/write the sysfs removal file.
 It cannot confirm exclusive access or permissions for the real operation.
 
-## Behavior and limits
+## Details and limits
 
 1. Resolve the block device through `/sys/dev/block/MAJOR:MINOR`, find its
    enclosing USB device, and enumerate all descendant disks and partitions.
