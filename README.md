@@ -43,12 +43,17 @@ Unmount filesystems on the target drive before running:
 droff --dry-run /dev/sdx  # Optional
 sudo droff /dev/sdx  # Or whatever privilege escalator you use...
 ```
+You can also list all removable USB drives with:
+```sh
+droff --list
+```
+This prints all USB drives connected, along with whether they passed the checks
+for safe removal. Reasons for failed checks are reported.
 
-The block device path is the required positional argument. Partition paths and
-device symlinks are accepted; the containing whole disk is selected. Only USB
-storage is supported.
-The entire USB device is removed, including every interface and logical unit.
-The program lists all affected disks before proceeding.
+Partition paths and device symlinks are accepted; the containing whole disk is
+selected. Only USB storage is supported. The entire USB device is removed,
+including every interface and logical unit. The program lists all affected disks
+before proceeding.
 
 There is no authentication prompt or privilege escalation, like those in
 `udisksctl`. Access permissions are enforced by the kernel.

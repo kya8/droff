@@ -73,6 +73,32 @@ static int resolve_device(dev_t device_number, char path[PATH_MAX])
     return 0;
 }
 
+static int find_usb_ancestor(char path[PATH_MAX], char usb_path[PATH_MAX])
+{
+    char device_type[PATH_MAX];
+
+    while (parent_directory(path)) {
+        int result = read_property(path, "DEVTYPE", device_type);
+        if (result < 0)
+            return -1;
+        if (result != 1 || strcmp(device_type, "usb_device") != 0)
+            continue;
+
+        char subsystem_path[PATH_MAX];
+        char subsystem[PATH_MAX];
+        if (format_path(subsystem_path, "%s/subsystem", path) < 0)
+            return -1;
+        if (realpath(subsystem_path, subsystem) == NULL)
+            return report_error("cannot resolve %s: %s", subsystem_path, strerror(errno));
+        if (strcmp(subsystem, "/sys/bus/usb") == 0) {
+            if (format_path(usb_path, "%s", path) < 0)
+                return -1;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int find_usb_device(const char *device_path, char usb_path[PATH_MAX],
                     dev_t *disk_number)
 {
@@ -110,22 +136,12 @@ int find_usb_device(const char *device_path, char usb_path[PATH_MAX],
         return report_error("cannot read device number from %s", number_path);
     *disk_number = makedev(major_number, minor_number);
 
-    while (parent_directory(path)) {
-        int result = read_property(path, "DEVTYPE", device_type);
-        if (result < 0)
-            return -1;
-        if (result != 1 || strcmp(device_type, "usb_device") != 0)
-            continue;
-        char subsystem_path[PATH_MAX];
-        char subsystem[PATH_MAX];
-        if (format_path(subsystem_path, "%s/subsystem", path) < 0)
-            return -1;
-        if (realpath(subsystem_path, subsystem) == NULL)
-            return report_error("cannot resolve %s: %s", subsystem_path, strerror(errno));
-        if (strcmp(subsystem, "/sys/bus/usb") == 0)
-            return format_path(usb_path, "%s", path);
-    }
-    return report_error("%s is not a disk attached through USB", device_path);
+    int ancestor_result = find_usb_ancestor(path, usb_path);
+    if (ancestor_result < 0)
+        return -1;
+    if (ancestor_result == 0)
+        return report_error("%s is not a disk attached through USB", device_path);
+    return 0;
 }
 
 int collect_devices(const char *usb_path, struct device_list *list)
@@ -210,6 +226,88 @@ int collect_devices(const char *usb_path, struct device_list *list)
     return result;
 }
 
+static int add_usb_drive(struct usb_drive_list *list, const char *usb_path)
+{
+    for (size_t index = 0; index < list->count; ++index)
+        if (strcmp(list->drives[index].usb_path, usb_path) == 0)
+            return 0;
+
+    if (list->count >= SIZE_MAX / sizeof(*list->drives))
+        return report_error("too many USB drives");
+    struct usb_drive *resized = realloc(list->drives,
+                                        (list->count + 1) * sizeof(*resized));
+    if (resized == NULL)
+        return report_error("cannot allocate USB drive list: %s", strerror(errno));
+    list->drives = resized;
+    struct usb_drive *drive = &list->drives[list->count];
+    memset(drive, 0, sizeof(*drive));
+    if (format_path(drive->usb_path, "%s", usb_path) < 0)
+        return -1;
+    ++list->count;
+    return 0;
+}
+
+int collect_usb_drives(struct usb_drive_list *list)
+{
+    DIR *directory = opendir("/sys/class/block");
+    if (directory == NULL)
+        return report_error("cannot open /sys/class/block: %s", strerror(errno));
+
+    int result = 0;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            if (errno != 0)
+                result = report_error("cannot read /sys/class/block: %s", strerror(errno));
+            break;
+        }
+        if (entry->d_name[0] == '.')
+            continue;
+
+        char link_path[PATH_MAX];
+        char sysfs_path[PATH_MAX];
+        char device_type[PATH_MAX];
+        char usb_path[PATH_MAX];
+        if (format_path(link_path, "/sys/class/block/%s", entry->d_name) < 0) {
+            result = -1;
+            break;
+        }
+        if (realpath(link_path, sysfs_path) == NULL) {
+            result = report_error("cannot resolve %s: %s", link_path, strerror(errno));
+            break;
+        }
+        if (read_property(sysfs_path, "DEVTYPE", device_type) != 1) {
+            result = report_error("cannot read device type for %s", link_path);
+            break;
+        }
+        if (strcmp(device_type, "disk") != 0)
+            continue;
+        int ancestor_result = find_usb_ancestor(sysfs_path, usb_path);
+        if (ancestor_result < 0) {
+            result = -1;
+            break;
+        }
+        if (ancestor_result > 0 && add_usb_drive(list, usb_path) < 0) {
+            result = -1;
+            break;
+        }
+    }
+    if (closedir(directory) != 0)
+        result = report_error("cannot close /sys/class/block: %s", strerror(errno));
+
+    if (result == 0) {
+        for (size_t index = 0; index < list->count; ++index) {
+            if (collect_devices(list->drives[index].usb_path,
+                                &list->drives[index].devices) < 0) {
+                result = -1;
+                break;
+            }
+        }
+    }
+    return result;
+}
+
 const struct block_device *find_device(const struct device_list *list,
                                       dev_t device_number)
 {
@@ -253,5 +351,16 @@ int release_devices(struct device_list *list)
     }
     free(list->devices);
     *list = (struct device_list){0};
+    return result;
+}
+
+int release_usb_drives(struct usb_drive_list *list)
+{
+    int result = 0;
+    for (size_t index = 0; index < list->count; ++index)
+        if (release_devices(&list->drives[index].devices) < 0)
+            result = -1;
+    free(list->drives);
+    *list = (struct usb_drive_list){0};
     return result;
 }
