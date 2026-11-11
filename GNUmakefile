@@ -10,8 +10,13 @@ dependencies := $(objects:.o=.d)
 
 all: build/droff
 
+static: build/droff-static
+
 build/droff: $(objects) GNUmakefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(objects) $(LDLIBS)
+
+build/droff-static: $(objects) GNUmakefile
+	$(CC) -static $(CFLAGS) $(LDFLAGS) -o $@ $(objects) $(LDLIBS)
 
 build/%.o: src/%.c GNUmakefile | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -Wpedantic -MMD -MP -c -o $@ $<
@@ -20,6 +25,6 @@ build:
 	mkdir -p $@
 
 clean:
-	$(RM) $(objects) $(dependencies) build/droff
+	$(RM) $(objects) $(dependencies) build/droff build/droff-static
 
 -include $(dependencies)

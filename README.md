@@ -1,8 +1,17 @@
 # droff
 
-A CLI tool for Linux to perform the USB storage removal sequence used by
-`udisksctl power-off -b DEVICE`. Requires only the Linux kernel and `/proc`,
-`/sys` access.
+A command-line utility for Linux to safetly remove USB drives.
+It performs the USB storage removal sequence used by
+`udisksctl power-off -b DEVICE`.
+
+Requires only the Linux kernel and `/proc`, `/sys` access to run.
+
+## Rationale
+I never found an exact alternative to `udisksctl power-off -b`, which is really
+handy for ___safely___ removing a USB drive, especially spinning portable HDDs
+and portable SSDs: simply unmounting filesystems and/or using `eject(1)`
+usually do not power them off cleanly. No other utils did the trick like udisks,
+so I wrote my own.
 
 ## Download
 Grab statically-linked binaries from Github actions:
@@ -13,8 +22,14 @@ Grab statically-linked binaries from Github actions:
 Requires a C11 compiler, GNU make, libc development headers, and Linux UAPI
 headers (including `linux/bsg.h` and `scsi/sg.h`).
 
+Build with make:
+
 ```sh
 make
+```
+Or, build the static binary:
+```sh
+make static
 ```
 
 The executable is `build/droff`. Compiler and linker options can be overridden
@@ -25,8 +40,8 @@ on the make command line, for example `make CC=clang CFLAGS='-O2 -g -Werror'`.
 Unmount filesystems on the target drive before running:
 
 ```sh
-droff --dry-run /dev/sdx
-sudo droff /dev/sdx
+droff --dry-run /dev/sdx  # Optional
+sudo droff /dev/sdx  # Or whatever privilege escalator you use...
 ```
 
 The block device path is the required positional argument. Partition paths and
@@ -35,9 +50,9 @@ storage is supported.
 The entire USB device is removed, including every interface and logical unit.
 The program lists all affected disks before proceeding.
 
-There is no authentication prompt or privilege escalation. Device access,
-SCSI command permissions, and sysfs write access are enforced by the kernel;
-access failures are reported. Typically the removal command requires root.
+There is no authentication prompt or privilege escalation, like those in
+`udisksctl`. Access permissions are enforced by the kernel.
+To perform the removal typically requires root.
 
 `--dry-run` only discovers devices and checks for use. It does not open disk
 nodes, flush caches, send SCSI commands, or open/write the sysfs removal file.
@@ -69,7 +84,9 @@ The program does not scan process file descriptors, unmount anything, or tear
 down mappings.
 
 Removal logically disconnects the USB device. Disk spin-down and actual USB
-power switching depend on the device, bridge, and hub. Successful removal does
-not guarantee that the hardware is electrically unpowered, especially if it
-uses an external supply. Reconnecting normally requires unplugging and
-replugging the device.
+power switching depend on the device. Successful removal does
+not guarantee that the hardware is electrically unpowered. E.g., some portable
+HDDs might take a few seconds after successful removal, to eventually spin-down
+and power off (while flashing their LED indicator).
+
+Reconnecting normally requires unplugging and replugging the device.
