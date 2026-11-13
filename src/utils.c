@@ -1,6 +1,6 @@
 #define _XOPEN_SOURCE 700
 
-#include "common.h"
+#include "utils.h"
 
 #include <limits.h>
 #include <stdarg.h>
@@ -27,3 +27,21 @@ int format_path(char *destination, const char *format, ...)
         return report_error("path is too long");
     return 0;
 }
+
+bool streq(const char* s, const char* s1)
+{
+    for (;; ++s, ++s1) {
+        if (*s != *s1) {
+            return false;
+        }
+        if (*s == 0) {
+            return true;
+        }
+    }
+}
+
+bool streq2(const char* s, const char* s1, const char* s2)
+{
+    return streq(s, s1) || streq(s, s2);
+}
+

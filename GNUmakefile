@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -g
 
-sources := src/droff.c src/common.c src/device.c src/busy.c src/power.c
+sources := src/main.c src/utils.c src/device.c src/busy.c src/power.c
 objects := $(sources:src/%.c=build/%.o)
 dependencies := $(objects:.o=.d)
 

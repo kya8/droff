@@ -1,7 +1,7 @@
 #define _XOPEN_SOURCE 700
 
 #include "device.h"
-#include "common.h"
+#include "utils.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -81,7 +81,7 @@ static int find_usb_ancestor(char path[PATH_MAX], char usb_path[PATH_MAX])
         int result = read_property(path, "DEVTYPE", device_type);
         if (result < 0)
             return -1;
-        if (result != 1 || strcmp(device_type, "usb_device") != 0)
+        if (result != 1 || !streq(device_type, "usb_device"))
             continue;
 
         char subsystem_path[PATH_MAX];
@@ -90,7 +90,7 @@ static int find_usb_ancestor(char path[PATH_MAX], char usb_path[PATH_MAX])
             return -1;
         if (realpath(subsystem_path, subsystem) == NULL)
             return report_error("cannot resolve %s: %s", subsystem_path, strerror(errno));
-        if (strcmp(subsystem, "/sys/bus/usb") == 0) {
+        if (streq(subsystem, "/sys/bus/usb")) {
             if (format_path(usb_path, "%s", path) < 0)
                 return -1;
             return 1;
@@ -114,13 +114,13 @@ int find_usb_device(const char *device_path, char usb_path[PATH_MAX],
         return -1;
     if (read_property(path, "DEVTYPE", device_type) != 1)
         return report_error("cannot determine block device type for %s", device_path);
-    if (strcmp(device_type, "partition") == 0) {
+    if (streq(device_type, "partition")) {
         if (!parent_directory(path))
             return report_error("cannot find disk for %s", device_path);
         if (read_property(path, "DEVTYPE", device_type) != 1)
             return report_error("cannot determine parent disk type for %s", device_path);
     }
-    if (strcmp(device_type, "disk") != 0)
+    if (!streq(device_type, "disk"))
         return report_error("%s does not identify a disk or partition", device_path);
 
     char number_path[PATH_MAX];
@@ -179,8 +179,8 @@ int collect_devices(const char *usb_path, struct device_list *list)
             report_error("cannot read device type for %s", link_path);
             break;
         }
-        device.whole_disk = strcmp(value, "disk") == 0;
-        if (!device.whole_disk && strcmp(value, "partition") != 0) {
+        device.whole_disk = streq(value, "disk");
+        if (!device.whole_disk && !streq(value, "partition")) {
             report_error("unexpected block device type: %s", value);
             break;
         }
@@ -229,7 +229,7 @@ int collect_devices(const char *usb_path, struct device_list *list)
 static int add_usb_drive(struct usb_drive_list *list, const char *usb_path)
 {
     for (size_t index = 0; index < list->count; ++index)
-        if (strcmp(list->drives[index].usb_path, usb_path) == 0)
+        if (streq(list->drives[index].usb_path, usb_path))
             return 0;
 
     if (list->count >= SIZE_MAX / sizeof(*list->drives))
@@ -281,7 +281,7 @@ int collect_usb_drives(struct usb_drive_list *list)
             result = report_error("cannot read device type for %s", link_path);
             break;
         }
-        if (strcmp(device_type, "disk") != 0)
+        if (!streq(device_type, "disk"))
             continue;
         int ancestor_result = find_usb_ancestor(sysfs_path, usb_path);
         if (ancestor_result < 0) {
@@ -334,7 +334,7 @@ int open_disks(struct device_list *list)
         char current_path[PATH_MAX];
         if (resolve_device(status.st_rdev, current_path) < 0)
             return -1;
-        if (strcmp(current_path, device->sysfs_path) != 0)
+        if (!streq(current_path, device->sysfs_path))
             return report_error("sysfs identity changed for %s", device->device_path);
     }
     return 0;

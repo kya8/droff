@@ -1,23 +1,24 @@
 #define _XOPEN_SOURCE 700
 
 #include "busy.h"
-#include "common.h"
+#include "utils.h"
 #include "device.h"
 #include "power.h"
 
 #include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static void print_usage(FILE *stream)
 {
-    fputs("Usage: droff [--dry-run] DEVICE\n"
-          "       droff --list\n"
-          "Safely stop storage and remove its containing USB device.\n"
+    fputs("droff: Safely remove USB storage devices.\n"
           "\n"
-          "  -l, --list        List removable USB drives and dry-check status.\n"
-          "  -n, --dry-run     Discover devices and check use without changing them.\n"
+          "Usage: droff [--dry-run] <BLOCK_DEV>\n"
+          "       droff --list\n"
+          "\n"
+          "Options:\n"
+          "  -l, --list        List removable USB drives and their dry-check status.\n"
+          "  -n, --dry-run     Check whether the device is safe for removal.\n"
           "  -h, --help        Show this help.\n", stream);
 }
 
@@ -33,7 +34,7 @@ static bool can_pass_dry_check(const struct usb_drive *drive)
         dev_t disk_number = 0;
         if (find_usb_device(device->device_path, usb_path, &disk_number) < 0)
             return false;
-        if (disk_number != device->device_number || strcmp(usb_path, drive->usb_path) != 0) {
+        if (disk_number != device->device_number || !streq(usb_path, drive->usb_path)) {
             report_error("device identity changed for %s", device->device_path);
             return false;
         }
@@ -84,25 +85,24 @@ int main(int argc, char **argv)
     bool end_options = false;
     for (int index = 1; index < argc; ++index) {
         const char *argument = argv[index];
-        if (!end_options && (strcmp(argument, "--help") == 0 || strcmp(argument, "-h") == 0)) {
+        if (!end_options && streq2(argument, "-h", "--help")) {
             print_usage(stdout);
             return 0;
         }
-        if (!end_options && (strcmp(argument, "--list") == 0 || strcmp(argument, "-l") == 0)) {
+        if (!end_options && streq2(argument, "-l", "--list")) {
             list_requested = true;
             continue;
         }
-        if (!end_options && (strcmp(argument, "--dry-run") == 0 || strcmp(argument, "-n") == 0)) {
+        if (!end_options && streq2(argument, "-n", "--dry-run")) {
             dry_run = true;
             continue;
         }
-        if (!end_options && strcmp(argument, "--") == 0) {
+        if (!end_options && streq(argument, "--")) {
             end_options = true;
             continue;
         }
         if ((!end_options && argument[0] == '-') || device_path != NULL) {
-            report_error("unexpected argument: %s", argument);
-            print_usage(stderr);
+            report_error("Unexpected argument: %s. Pass -h for help.", argument);
             return 2;
         } else {
             device_path = argument;
@@ -110,14 +110,13 @@ int main(int argc, char **argv)
     }
     if (list_requested) {
         if (device_path != NULL || dry_run) {
-            report_error("--list cannot be combined with DEVICE or --dry-run");
-            print_usage(stderr);
+            report_error("--list can only be used alone.");
             return 2;
         }
         return list_usb_drives();
     }
     if (device_path == NULL) {
-        print_usage(stderr);
+        report_error("Device path not specified.");
         return 2;
     }
 

@@ -1,7 +1,7 @@
 #define _XOPEN_SOURCE 700
 
 #include "busy.h"
-#include "common.h"
+#include "utils.h"
 #include "device.h"
 
 #include <dirent.h>

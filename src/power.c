@@ -2,7 +2,7 @@
 
 #include "power.h"
 #include "busy.h"
-#include "common.h"
+#include "utils.h"
 #include "device.h"
 
 #include <errno.h>
